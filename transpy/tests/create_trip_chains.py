@@ -4,8 +4,6 @@ import itertools
 import collections
 import networkx as nx
 
-import itertools
-
 
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
@@ -85,7 +83,6 @@ def purpose_viable_tripchains(G, tripchain_nodes):
     
     return viable_tripchains
 
-
 def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
 
     def sequence_isunique(sequence):
@@ -140,50 +137,80 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
 
     return chron_ordered_tripchains
 
-"""
-infilepath = r'/mnt/sda1/Users/Work/SharedSpace_linux/ODs_purpose_mode_timeperiod.csv'
 
-odtemp = pd.read_csv(infilepath, nrows=10)
+def tripchains_to_dataframe(tripchains, filename='trip_chains.csv'):
 
-dtypes_keys = list(odtemp.columns)
-dtypes_vals = ['category', 'category', 'category',
-               'category', 'category', 'float']
+    data = []
+    tc_num = 0
+    for tc in tripchains:
+        for k, leg_attrs in tc.items():
+            o, d = k
+            purp = leg_attrs['Purpose']
+            tp = leg_attrs['TimePeriod']
+            entry = [tc_num, o, d, purp, tp]
+            data.append(entry)
 
-dtypes = dict(zip(dtypes_keys, dtypes_vals))
+        tc_num += 1
 
-od = pd.read_csv(infilepath, index_col=list(range(0, 5)))
-#od.sort_index(inplace=True)
+    cols = ['TripChainID', 'Orig', 'Dest', 'Purpose', 'TimePeriod']
+    df = pd.DataFrame(data, columns=cols)
 
-d_grp_purp = {'HBW': 'HB', 'HBO': 'HB', 'NHB': 'NHB'}
-grp_keys = [None, None, d_grp_purp, None, None]
-
-odg = od.groupby(grp_keys, level=od.index.names).sum()
-
-odg.reset_index(inplace=True)
-odg.Purpose = odg.Purpose.astype('category')
+    df.to_csv(filename, index=False)
 
 
-odg.set_index(['orig_zoneID', 'dest_zoneID', 'Purpose', 'Mode', 'TimePeriod'], inplace=True)
+def main():
 
-od_car = odg.xs('CarDriver', level='Mode')
+    read_tmp = True
 
-od_car.reset_index(inplace=True)
+    if read_tmp==False:
+        infilepath = r'/mnt/sda1/Users/Work/SharedSpace_linux/ODs_purpose_mode_timeperiod.csv'
 
-# Reduce
-od_car_reduced = od_car[od_car.Trips >= 50]
-# Remove intrazonals
-od_car_reduced = od_car_reduced[od_car_reduced.orig_zoneID != od_car_reduced.dest_zoneID]
+        print('Reading...')
+        odtemp = pd.read_csv(infilepath, nrows=10)
 
-od_car_reduced.to_csv('tmp.csv')
-"""
-print('Reading...')
-od_car_reduced = pd.read_csv('tmp.csv')
+        dtypes_keys = list(odtemp.columns)
+        dtypes_vals = ['category', 'category', 'category',
+                       'category', 'category', 'float']
 
-G = nx.from_pandas_dataframe(od_car_reduced, 'orig_zoneID', 'dest_zoneID',
-                             ['Purpose', 'TimePeriod'], nx.MultiDiGraph())
+        dtypes = dict(zip(dtypes_keys, dtypes_vals))
 
-print('Creating Chains...')
-potential_tripchains = nx.trip_chains(G, 5)
+        od = pd.read_csv(infilepath, index_col=list(range(0, 5)))
+        #od.sort_index(inplace=True)
 
-vtc = purpose_viable_tripchains(G, potential_tripchains)
-vtc2 = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
+        d_grp_purp = {'HBW': 'HB', 'HBO': 'HB', 'NHB': 'NHB'}
+        grp_keys = [None, None, d_grp_purp, None, None]
+
+        odg = od.groupby(grp_keys, level=od.index.names).sum()
+
+        odg.reset_index(inplace=True)
+        odg.Purpose = odg.Purpose.astype('category')
+
+        odg.set_index(['orig_zoneID', 'dest_zoneID', 'Purpose', 'Mode', 'TimePeriod'], inplace=True)
+
+        od_car = odg.xs('CarDriver', level='Mode')
+
+        od_car.reset_index(inplace=True)
+
+        # Reduce
+        od_car_reduced = od_car[od_car.Trips >= 50]
+        # Remove intrazonals
+        od_car_reduced = od_car_reduced[od_car_reduced.orig_zoneID != od_car_reduced.dest_zoneID]
+
+        od_car_reduced.to_csv('tmp.csv', index=False)
+    else:
+        od_car_reduced = pd.read_csv('tmp.csv')
+
+    G = nx.from_pandas_dataframe(od_car_reduced, 'orig_zoneID', 'dest_zoneID',
+                                 ['Purpose', 'TimePeriod'], nx.MultiDiGraph())
+
+    print('Creating Chains...')
+    potential_tripchains = nx.trip_chains(G, 5)
+
+    vtc = purpose_viable_tripchains(G, potential_tripchains)
+    vtc2 = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
+
+    print('Exporting...')
+    tripchains_to_dataframe(vtc2)
+
+if __name__ == '__main__':
+    main()
