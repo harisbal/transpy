@@ -99,3 +99,5 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+transpy/tests/trip_chains/outputs/

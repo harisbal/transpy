@@ -138,7 +138,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     return chron_ordered_tripchains
 
 
-def tripchains_to_dataframe(tripchains, filename='trip_chains.csv'):
+def tripchains_to_dataframe(tripchains, max_legs_in_chain):
 
     data = []
     tc_num = 0
@@ -155,11 +155,13 @@ def tripchains_to_dataframe(tripchains, filename='trip_chains.csv'):
     cols = ['TripChainID', 'Orig', 'Dest', 'Purpose', 'TimePeriod']
     df = pd.DataFrame(data, columns=cols)
 
+    filename = 'trip_chains_{}legs.csv'.format(max_legs_in_chain)
     df.to_csv(filename, index=False)
 
 
 def main():
 
+    max_legs_in_chain = 6
     read_tmp = True
 
     if read_tmp==False:
@@ -204,13 +206,13 @@ def main():
                                  ['Purpose', 'TimePeriod'], nx.MultiDiGraph())
 
     print('Creating Chains...')
-    potential_tripchains = nx.trip_chains(G, 5)
+    potential_tripchains = nx.trip_chains(G, max_legs_in_chain)
 
     vtc = purpose_viable_tripchains(G, potential_tripchains)
     vtc2 = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
 
     print('Exporting...')
-    tripchains_to_dataframe(vtc2)
+    tripchains_to_dataframe(vtc2, max_legs_in_chain)
 
 if __name__ == '__main__':
     main()
