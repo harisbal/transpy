@@ -1,4 +1,3 @@
-
 import pandas as pd
 import itertools
 import collections
@@ -11,25 +10,26 @@ def pairwise(iterable):
     next(b, None)
     return zip(a, b)
 
+
 def is_ascending(lst):
     for i in range(len(lst) - 1):
-        if lst[i]>lst[i+1]:
+        if lst[i] > lst[i + 1]:
             return False
 
     return True
 
-def purpose_viable_tripchains(G, tripchain_nodes):
 
+def purpose_viable_tripchains(G, tripchain_nodes):
     def filter_edges_purpose(start_node, end_node, purpose):
         edges_data = G.get_edge_data(start_node, end_node)
         filt_edges = [v for k, v in edges_data.items() if v['Purpose'] == purpose]
-        
+
         if filt_edges:
             od_pair = (start_node, end_node)
             return od_pair, filt_edges
         else:
             return None
-    
+
     def filter_interm_edges(interm_edges):
         filt_interm_edges = collections.OrderedDict()
         for u, v in pairwise(interm_edges):
@@ -39,11 +39,11 @@ def purpose_viable_tripchains(G, tripchain_nodes):
                 filt_interm_edges[od] = filt_edges
             else:
                 return None
-        
+
         return filt_interm_edges
 
     viable_tripchains = []
-    
+
     for tcn in tripchain_nodes:
         # We filter the edges of the tripchain according to purpose
         edges = collections.OrderedDict()
@@ -55,7 +55,7 @@ def purpose_viable_tripchains(G, tripchain_nodes):
 
             first_od, first_edges = filter_edges_purpose(tcn[0], tcn[1], 'HB')
             last_od, last_edges = filter_edges_purpose(tcn[-2], tcn[-1], 'HB')
-            
+
             # Check if first and last leg fulfil the criteria
             # If they don't function has returned NaN
             if first_edges and last_edges:
@@ -63,13 +63,13 @@ def purpose_viable_tripchains(G, tripchain_nodes):
                 edges[last_od] = last_edges
             else:
                 continue
-        
-            if len(tcn) - 1 > 2: # -1 because we manually added the last node of the chain
+
+            if len(tcn) - 1 > 2:  # -1 because we manually added the last node of the chain
                 # The rest can only be NHB trips
                 interm_edges = tcn[1:-1]
-                
+
                 filt_interm_edges = filter_interm_edges(interm_edges)
-                
+
                 if filt_interm_edges:
                     for k, fie in filt_interm_edges.items():
                         edges[k] = fie
@@ -80,11 +80,11 @@ def purpose_viable_tripchains(G, tripchain_nodes):
             edges.move_to_end(last_od)
 
             viable_tripchains.append(edges)
-    
+
     return viable_tripchains
 
-def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
 
+def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     def sequence_isunique(sequence):
         # Check if entries in sequence unique
         set_sequence = set(sequence)
@@ -101,7 +101,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     chron_ordered_tripchains = []
 
     for tc in tripchains:
-        leg_timeperiods = {} # dictionary with the available timeperiods for each leg (key=od pair)
+        leg_timeperiods = {}  # dictionary with the available timeperiods for each leg (key=od pair)
         # for each od I create a list of the available timeperiods
         for od, edge_attrs in tc.items():
             leg_timeperiods[od] = []
@@ -112,7 +112,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
                 leg_timeperiods[od].append(leg_timeperiod)
 
         # Here I will create a list with the available timeperiods for each od in the tripchain
-        tripchain_leg_timeperiods = [] # e.g. [ [AM, IP, OP], [IP, PM], [PM, OP] ]
+        tripchain_leg_timeperiods = []  # e.g. [ [AM, IP, OP], [IP, PM], [PM, OP] ]
         for od, timeperiods in leg_timeperiods.items():
             tripchain_leg_timeperiods.append(timeperiods)
 
@@ -138,8 +138,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     return chron_ordered_tripchains
 
 
-def tripchains_to_dataframe(tripchains, max_legs_in_chain):
-
+def tripchains_to_csv(tripchains, max_legs_in_chain):
     data = []
     tc_num = 0
     for tc in tripchains:
@@ -152,57 +151,55 @@ def tripchains_to_dataframe(tripchains, max_legs_in_chain):
 
         tc_num += 1
 
-    cols = ['TripChainID', 'Orig', 'Dest', 'Purpose', 'TimePeriod']
+    cols = ['TripChainID', 'OrigID', 'DestID', 'Purpose', 'TimePeriod']
     df = pd.DataFrame(data, columns=cols)
 
-    filename = 'trip_chains_{}legs.csv'.format(max_legs_in_chain)
+    filename = 'tripchains_{}legs.csv'.format(max_legs_in_chain)
     df.to_csv(filename, index=False)
 
 
 def main():
+    max_legs_in_chain = 5
 
-    max_legs_in_chain = 6
-    read_tmp = True
+    infilepath = r'od_purpose_mode_timeperiod_noExtToExt.csv'
 
-    if read_tmp==False:
-        infilepath = r'/mnt/sda1/Users/Work/SharedSpace_linux/ODs_purpose_mode_timeperiod.csv'
+    print('Reading...')
+    odtemp = pd.read_csv(infilepath, nrows=10)
 
-        print('Reading...')
-        odtemp = pd.read_csv(infilepath, nrows=10)
+    dtypes_keys = list(odtemp.columns)
+    dtypes_vals = ['category', 'category', 'category',
+                   'category', 'category', 'float']
 
-        dtypes_keys = list(odtemp.columns)
-        dtypes_vals = ['category', 'category', 'category',
-                       'category', 'category', 'float']
+    dtypes = dict(zip(dtypes_keys, dtypes_vals))
 
-        dtypes = dict(zip(dtypes_keys, dtypes_vals))
+    od = pd.read_csv(infilepath, index_col=list(range(0, 5)))
+    # od.sort_index(inplace=True)
 
-        od = pd.read_csv(infilepath, index_col=list(range(0, 5)))
-        #od.sort_index(inplace=True)
+    d_grp_purp = {'HBW': 'HB', 'HBO': 'HB', 'NHB': 'NHB'}
+    grp_keys = [None, None, d_grp_purp, None, None]
 
-        d_grp_purp = {'HBW': 'HB', 'HBO': 'HB', 'NHB': 'NHB'}
-        grp_keys = [None, None, d_grp_purp, None, None]
+    odg = od.groupby(grp_keys, level=od.index.names).sum()
 
-        odg = od.groupby(grp_keys, level=od.index.names).sum()
+    odg.reset_index(inplace=True)
+    odg.Purpose = odg.Purpose.astype('category')
 
-        odg.reset_index(inplace=True)
-        odg.Purpose = odg.Purpose.astype('category')
+    odg.set_index(['OrigID', 'DestID', 'Purpose', 'Mode', 'TimePeriod'], inplace=True)
 
-        odg.set_index(['orig_zoneID', 'dest_zoneID', 'Purpose', 'Mode', 'TimePeriod'], inplace=True)
+    od_car = odg.xs('CarDriver', level='Mode')
 
-        od_car = odg.xs('CarDriver', level='Mode')
+    od_car.reset_index(inplace=True)
 
-        od_car.reset_index(inplace=True)
+    # Reduce
+    od_car_reduced = od_car[od_car.Trips >= 1]
+    # Remove intrazonals
+    od_car_reduced = od_car_reduced[od_car_reduced.OrigID != od_car_reduced.DestID]
+    # Round
+    od_car_reduced = od_car_reduced.round()
 
-        # Reduce
-        od_car_reduced = od_car[od_car.Trips >= 50]
-        # Remove intrazonals
-        od_car_reduced = od_car_reduced[od_car_reduced.orig_zoneID != od_car_reduced.dest_zoneID]
+    # Export OD
+    od_car_reduced.to_csv('tripchains_od.csv')
 
-        od_car_reduced.to_csv('tmp.csv', index=False)
-    else:
-        od_car_reduced = pd.read_csv('tmp.csv')
-
-    G = nx.from_pandas_dataframe(od_car_reduced, 'orig_zoneID', 'dest_zoneID',
+    G = nx.from_pandas_dataframe(od_car_reduced, 'OrigID', 'DestID',
                                  ['Purpose', 'TimePeriod'], nx.MultiDiGraph())
 
     print('Creating Chains...')
@@ -212,7 +209,9 @@ def main():
     vtc2 = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
 
     print('Exporting...')
-    tripchains_to_dataframe(vtc2, max_legs_in_chain)
+    tripchains_to_csv(vtc2, max_legs_in_chain)
+
+    print('End')
 
 if __name__ == '__main__':
     main()
