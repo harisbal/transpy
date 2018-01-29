@@ -138,7 +138,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     return chron_ordered_tripchains
 
 
-def tripchains_to_csv(tripchains, max_legs_in_chain):
+def tripchains_to_csv(tripchains, max_legs_in_chain, max_trips):
     data = []
     tc_num = 0
     for tc in tripchains:
@@ -154,12 +154,13 @@ def tripchains_to_csv(tripchains, max_legs_in_chain):
     cols = ['TripChainID', 'OrigID', 'DestID', 'Purpose', 'TimePeriod']
     df = pd.DataFrame(data, columns=cols)
 
-    filename = 'tripchains_{}legs.csv'.format(max_legs_in_chain)
+    filename = 'tripchains_{}legs_over{}trips.csv'.format(max_legs_in_chain, max_trips)
     df.to_csv(filename, index=False)
 
 
 def main():
-    max_legs_in_chain = 5
+    max_legs_in_chain = 4
+    max_trips = 20
 
     infilepath = r'od_purpose_mode_timeperiod_noExtToExt.csv'
 
@@ -190,7 +191,7 @@ def main():
     od_car.reset_index(inplace=True)
 
     # Reduce
-    od_car_reduced = od_car[od_car.Trips >= 1]
+    od_car_reduced = od_car[od_car.Trips >= max_trips]
     # Remove intrazonals
     od_car_reduced = od_car_reduced[od_car_reduced.OrigID != od_car_reduced.DestID]
     # Round
@@ -206,10 +207,10 @@ def main():
     potential_tripchains = nx.trip_chains(G, max_legs_in_chain)
 
     vtc = purpose_viable_tripchains(G, potential_tripchains)
-    vtc2 = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
+    chron_vtc = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
 
     print('Exporting...')
-    tripchains_to_csv(vtc2, max_legs_in_chain)
+    tripchains_to_csv(chron_vtc, max_legs_in_chain, max_trips)
 
     print('End')
 

@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from multiprocessing import Pool, cpu_count
 import tqdm
 
 def insert_legID(df):
@@ -9,11 +11,29 @@ def insert_legID(df):
     return df
 
 def encode_df(df):
+    non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns.values
+    d_encoding = {}
     # Replace names with codes to save space
-    for c in df.columns[:-1]:
+    for c in non_numeric_cols:
         df[c] = df[c].astype('category')
+        keys = df[c].values
         df[c] = df[c].cat.codes
-    return df
+        vals = df[c].values
+        d_encoding[c] = dict(zip(keys, vals))
+    return df, d_encoding
+
+def prepare_chains(dfGrouped):
+    k, g = dfGrouped
+    # List with all the legs included in the tripchain
+    legs = []
+    for leg in g.itertuples():
+        legs.append(leg.LegID)
+    
+    legs_joined = ' '.join(legs)
+    res = '({},*) {}'.format(k, legs_joined)
+    res = res.replace("'", "")
+    return res
+
 
 max_legs = 5
 
@@ -27,8 +47,10 @@ od = pd.read_csv(infile_od)
 tripchain_ids = tcs.TripChainID.unique().tolist()
 od.Trips = od.Trips.astype(int)
 
-od = encode_df(od)
-tcs = encode_df(tcs)
+# Ecode the dataframe
+od, d_encoding = encode_df(od)
+# Use the encoding to reaplace names in the tripchains file
+tcs.replace(d_encoding, inplace=True)
 
 # Add the concatenated description of the od/tripchain
 od = insert_legID(od)
@@ -52,25 +74,25 @@ with open(outfilepath_data, 'w') as f:
     # CHAIN_IDS part
     print('Preparing CHAIN_IDS...')
     print(r'set CHAIN_IDS :=', file=f)
-    print(*tripchain_ids, file=f, sep=' ', end=';\n')
+    for tc_id in tripchain_ids: 
+        print(tc_id, file=f)
+    print(';', file=f)
 
     print('Preparing CHAINS...')
     # CHAINS part
     # group for each tripchain_ID
     print('set CHAINS :=', file=f)
 
-    tcsg = tcs.groupby('TripChainID
-    for tc, g in tqdm.tqdm(tcsg):
-        # List with all the legs included in the tripchain
-        legs = []
-        for leg in g.itertuples():
-            legs.append(leg.LegID)
+    tcsg = tcs.groupby('TripChainID')
 
-        print('({},*) '.format(tc),file=f, end='')
-        print(*legs, file=f, sep=' ')
+    with Pool(cpu_count()-1) as p:
+        results_lst = tqdm.tqdm(p.imap_unordered(prepare_chains, tcsg),
+                                total=len(tcsg))
+
+        for res in results_lst:
+            print(res, file=f)
 
     # Add the missing ; at the end
-    # Check if works
     print(';', file=f)
 
 print('END')
