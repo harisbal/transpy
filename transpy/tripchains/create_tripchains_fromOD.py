@@ -138,7 +138,7 @@ def chronologically_viable_tripchains(tripchains, timeperiod_sequence):
     return chron_ordered_tripchains
 
 
-def tripchains_to_csv(tripchains, max_legs_in_chain, max_trips):
+def tripchains_to_csv(tripchains, outfilepath):
     data = []
     tc_num = 0
     for tc in tripchains:
@@ -154,54 +154,25 @@ def tripchains_to_csv(tripchains, max_legs_in_chain, max_trips):
     cols = ['TripChainID', 'OrigID', 'DestID', 'Purpose', 'TimePeriod']
     df = pd.DataFrame(data, columns=cols)
 
-    filename = 'tripchains_{}legs_over{}trips.csv'.format(max_legs_in_chain, max_trips)
-    df.to_csv(filename, index=False)
+
+    df.to_csv(outfilepath, index=False)
+
+def encode_df(df):
+    non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns.values
+    d_encoding = {}
+    # Replace names with codes to save space
+    for c in non_numeric_cols:
+        df[c] = df[c].astype('category')
+        keys = df[c].values
+        df[c] = df[c].cat.codes
+        vals = df[c].values
+        d_encoding[c] = dict(zip(keys, vals))
+    return df, d_encoding
 
 
-def main():
-    max_legs_in_chain = 4
-    max_trips = 20
+def main(od, max_legs_in_chain, graph_source, graph_target, edge_attrs=None, outfilepath=None):
 
-    infilepath = r'od_purpose_mode_timeperiod_noExtToExt.csv'
-
-    print('Reading...')
-    odtemp = pd.read_csv(infilepath, nrows=10)
-
-    dtypes_keys = list(odtemp.columns)
-    dtypes_vals = ['category', 'category', 'category',
-                   'category', 'category', 'float']
-
-    dtypes = dict(zip(dtypes_keys, dtypes_vals))
-
-    od = pd.read_csv(infilepath, index_col=list(range(0, 5)))
-    # od.sort_index(inplace=True)
-
-    d_grp_purp = {'HBW': 'HB', 'HBO': 'HB', 'NHB': 'NHB'}
-    grp_keys = [None, None, d_grp_purp, None, None]
-
-    odg = od.groupby(grp_keys, level=od.index.names).sum()
-
-    odg.reset_index(inplace=True)
-    odg.Purpose = odg.Purpose.astype('category')
-
-    odg.set_index(['OrigID', 'DestID', 'Purpose', 'Mode', 'TimePeriod'], inplace=True)
-
-    od_car = odg.xs('CarDriver', level='Mode')
-
-    od_car.reset_index(inplace=True)
-
-    # Reduce
-    od_car_reduced = od_car[od_car.Trips >= max_trips]
-    # Remove intrazonals
-    od_car_reduced = od_car_reduced[od_car_reduced.OrigID != od_car_reduced.DestID]
-    # Round
-    od_car_reduced = od_car_reduced.round()
-
-    # Export OD
-    od_car_reduced.to_csv('tripchains_od.csv')
-
-    G = nx.from_pandas_dataframe(od_car_reduced, 'OrigID', 'DestID',
-                                 ['Purpose', 'TimePeriod'], nx.MultiDiGraph())
+    G = nx.from_pandas_dataframe(od, graph_source, graph_target, edge_attrs, nx.MultiDiGraph())
 
     print('Creating Chains...')
     potential_tripchains = nx.trip_chains(G, max_legs_in_chain)
@@ -209,8 +180,11 @@ def main():
     vtc = purpose_viable_tripchains(G, potential_tripchains)
     chron_vtc = chronologically_viable_tripchains(vtc, ['AM', 'IP', 'PM', 'OP'])
 
+    if outfilepath is None:
+        outfilepath = 'tripchains_{}legs.csv'.format(max_legs_in_chain)
+
     print('Exporting...')
-    tripchains_to_csv(chron_vtc, max_legs_in_chain, max_trips)
+    tripchains_to_csv(chron_vtc, outfilepath)
 
     print('End')
 

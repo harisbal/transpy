@@ -34,65 +34,69 @@ def prepare_chains(dfGrouped):
     res = res.replace("'", "")
     return res
 
+def main():
+	max_legs = 5
+	max_trips = 30
+	
+	infile_tripchains = r'tripchains_{}legs_over{}trips.csv'.format(max_legs, max_trips)
+	infile_od = r'tripchains_od_over{}trips.csv'.format(max_trips)
 
-max_legs = 5
+	outfilepath_data = 'data_{}legs_encoded.dat'.format(max_legs)
+	
+	#tripchains
+	tcs = pd.read_csv(infile_tripchains)
+	od = pd.read_csv(infile_od)
 
-infile_tripchains = r'tripchains_{}legs.csv'.format(max_legs)
-infile_od = r'tripchains_od.csv'
+	tripchain_ids = tcs.TripChainID.unique().tolist()
+	od.Trips = od.Trips.astype(int)
 
-#tripchains
-tcs = pd.read_csv(infile_tripchains)
-od = pd.read_csv(infile_od)
+	# Ecode the dataframe
+	od, d_encoding = encode_df(od)
+	# Use the encoding to reaplace names in the tripchains file
+	tcs.replace(d_encoding, inplace=True)
 
-tripchain_ids = tcs.TripChainID.unique().tolist()
-od.Trips = od.Trips.astype(int)
+	# Add the concatenated description of the od/tripchain
+	od = insert_legID(od)
+	tcs = insert_legID(tcs)
 
-# Ecode the dataframe
-od, d_encoding = encode_df(od)
-# Use the encoding to reaplace names in the tripchains file
-tcs.replace(d_encoding, inplace=True)
+	with open(outfilepath_data, 'w') as f:
+		print(r'data;', file=f)
 
-# Add the concatenated description of the od/tripchain
-od = insert_legID(od)
-tcs = insert_legID(tcs)
+		# LINKS part
+		print('Preparing LEGS...')
+		print('param: LEGS: trips:=', file=f)
+		for od_pair in od.itertuples():
+			outline = od_pair.LegID + ' ' + str(od_pair.Trips)
 
-outfilepath_data = 'data_{}legs_encoded.dat'.format(max_legs)
- 
-with open(outfilepath_data, 'w') as f:
-    print(r'data;', file=f)
+			print(outline, file=f)
 
-    # LINKS part
-    print('Preparing LEGS...')
-    print('param: LEGS: trips:=', file=f)
-    for od_pair in od.itertuples():
-        outline = od_pair.LegID + ' ' + str(od_pair.Trips)
+		print(';', file=f)
 
-        print(outline, file=f)
+		# CHAIN_IDS part
+		print('Preparing CHAIN_IDS...')
+		print(r'set CHAIN_IDS :=', file=f)
+		for tc_id in tripchain_ids: 
+			print(tc_id, file=f)
+		print(';', file=f)
 
-    print(';', file=f)
+		print('Preparing CHAINS...')
+		# CHAINS part
+		# group for each tripchain_ID
+		print('set CHAINS :=', file=f)
 
-    # CHAIN_IDS part
-    print('Preparing CHAIN_IDS...')
-    print(r'set CHAIN_IDS :=', file=f)
-    for tc_id in tripchain_ids: 
-        print(tc_id, file=f)
-    print(';', file=f)
+		tcsg = tcs.groupby('TripChainID')
 
-    print('Preparing CHAINS...')
-    # CHAINS part
-    # group for each tripchain_ID
-    print('set CHAINS :=', file=f)
+		with Pool(cpu_count()-1) as p:
+			results_lst = tqdm.tqdm(p.imap_unordered(prepare_chains, tcsg),
+									total=len(tcsg))
 
-    tcsg = tcs.groupby('TripChainID')
+			for res in results_lst:
+				print(res, file=f)
 
-    with Pool(cpu_count()-1) as p:
-        results_lst = tqdm.tqdm(p.imap_unordered(prepare_chains, tcsg),
-                                total=len(tcsg))
+		# Add the missing ; at the end
+		print(';', file=f)
 
-        for res in results_lst:
-            print(res, file=f)
+	print('END')
 
-    # Add the missing ; at the end
-    print(';', file=f)
-
-print('END')
+if __name__ == '__main__':
+	main()
